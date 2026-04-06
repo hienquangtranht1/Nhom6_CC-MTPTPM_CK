@@ -1,4 +1,4 @@
-﻿using BookinhMVC.Models;
+using BookinhMVC.Models;
 using BookinhMVC.Services; // Nơi chứa AppointmentReminderService, MomoService...
 using BookinhMVC.Hubs;     // 👇 QUAN TRỌNG: Import Hubs để dùng BookingHub
 using BookinhMVC.Helpers;  // 👈 needed for SessionUserIdProvider
@@ -95,7 +95,7 @@ using (var scope = app.Services.CreateScope())
         var db = services.GetRequiredService<BookingContext>();
         var passwordHasher = new PasswordHasher<NguoiDung>();
 
-        // db.Database.EnsureCreated(); // Mở nếu muốn tạo DB mới hoàn toàn
+        db.Database.EnsureCreated(); // Mở nếu muốn tạo DB mới hoàn toàn
 
         // Tạo Admin
         if (!db.NguoiDungs.Any(u => u.TenDangNhap == "admin"))

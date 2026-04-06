@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # 1. DATABASE SERVICE (SQL Server)
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: booking_db
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=Password123!@#
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlvolume:/var/opt/mssql
+    networks:
+      - booking_network
+
+  # 2. BACKEND SERVICE (ASP.NET Core 8)
+  backend:
+    build:
+      context: ./BookinhMVC
+      dockerfile: Dockerfile
+    container_name: booking_backend
+    ports:
+      - "5062:5062"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=booking;User Id=sa;Password=Password123!@#;TrustServerCertificate=True;
+    depends_on:
+      - sqlserver
+    networks:
+      - booking_network
+
+  # 3. FRONTEND SERVICE (Nginx / Web)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: booking_frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - booking_network
+
+volumes:
+  sqlvolume:
+
+networks:
+  booking_network:
+    driver: bridge
