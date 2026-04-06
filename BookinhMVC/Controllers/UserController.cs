@@ -68,8 +68,34 @@ namespace BookinhMVC.Controllers
         // =========================================================
         // PHẦN 1: WEB MVC (Trả về View cho trình duyệt)
         // =========================================================
+        #region Authentication (Login/Register/Logout)
 
-        
+        [HttpGet("Login")]
+        public IActionResult Login() => View();
+
+        [HttpPost("Login")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Login(string username, string password)
+        {
+            var user = await _context.NguoiDungs.FirstOrDefaultAsync(u => u.TenDangNhap == username);
+            if (user != null && _passwordHasher.VerifyHashedPassword(user, user.MatKhau, password) == PasswordVerificationResult.Success)
+            {
+                // Lưu Session
+                HttpContext.Session.SetInt32("UserId", user.MaNguoiDung);
+                HttpContext.Session.SetString("UserRole", user.VaiTro);
+
+                if (user.VaiTro == "Bệnh nhân")
+                {
+                    var p = await _context.BenhNhans.FindAsync(user.MaNguoiDung);
+                    if (p != null) HttpContext.Session.SetString("PatientName", p.HoTen);
+                }
+
+                return RedirectToAction("Index", "Home");
+            }
+
+            ModelState.AddModelError("", "Sai tài khoản hoặc mật khẩu.");
+            return View();
+        }
 
         [HttpPost("/Logout")]
         [ValidateAntiForgeryToken]
@@ -79,8 +105,85 @@ namespace BookinhMVC.Controllers
             return RedirectToAction("Login", "User");
         }
 
-        
+        [AllowAnonymous]
+        [HttpGet("Register")]
+        public IActionResult Register() => View();
 
+        [HttpPost("Register")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Register(string username, string password, string fullname, DateTime dob,
+           string gender, string phone, string email, string address, string soBaoHiem)
+        {
+            // Server-side format validation (defensive)
+            // Username: alphanumeric, 4-50 chars, at least one letter, no spaces/special
+            if (string.IsNullOrWhiteSpace(username) || !Regex.IsMatch(username, @"^(?=.*[A-Za-z])[A-Za-z0-9]{4,50}$"))
+            {
+                ModelState.AddModelError("", "Tên đăng nhập không hợp lệ: phải chứa chữ và số, không có khoảng trắng, 4-50 ký tự và có ít nhất 1 chữ cái.");
+                return View();
+            }
+
+            // Password: min 6, contains digit and special char
+            if (string.IsNullOrWhiteSpace(password) || !Regex.IsMatch(password, @"^(?=.{6,100}$)(?=.*\d)(?=.*\W).*$"))
+            {
+                ModelState.AddModelError("", "Mật khẩu phải ít nhất 6 ký tự, chứa chữ số và ký tự đặc biệt.");
+                return View();
+            }
+
+            // Phone: must be 10 digits starting with 0
+            if (string.IsNullOrWhiteSpace(phone) || !Regex.IsMatch(phone, @"^0\d{9}$"))
+            {
+                ModelState.AddModelError("", "Số điện thoại không hợp lệ. Phải có 10 chữ số và bắt đầu bằng 0.");
+                return View();
+            }
+
+            // BHYT: must be exactly 10 digits
+            if (string.IsNullOrWhiteSpace(soBaoHiem) || !Regex.IsMatch(soBaoHiem, @"^\d{10}$"))
+            {
+                ModelState.AddModelError("", "Số BHYT phải có đúng 10 chữ số.");
+                return View();
+            }
+
+            // Uniqueness checks
+            if (await _context.NguoiDungs.AnyAsync(u => u.TenDangNhap == username))
+            {
+                ModelState.AddModelError("", "Tên đăng nhập đã tồn tại.");
+                return View();
+            }
+
+            if (await _context.BenhNhans.AnyAsync(b => b.Email == email))
+            {
+                ModelState.AddModelError("", "Email đã được sử dụng.");
+                return View();
+            }
+
+            if (await _context.BenhNhans.AnyAsync(b => b.SoBaoHiem == soBaoHiem))
+            {
+                ModelState.AddModelError("", "Số BHYT đã được sử dụng.");
+                return View();
+            }
+
+            string otp = new Random().Next(100000, 999999).ToString();
+            var registrationData = new RegistrationModel
+            {
+                username = username,
+                password = password,
+                fullname = fullname,
+                dob = dob,
+                gender = gender,
+                phone = phone,
+                email = email,
+                address = address,
+                soBaoHiem = soBaoHiem,
+                otp = otp
+            };
+
+            HttpContext.Session.SetString("RegistrationData", JsonSerializer.Serialize(registrationData));
+            HttpContext.Session.SetString("RegistrationOtp", otp);
+            HttpContext.Session.SetString("RegistrationOtpTime", DateTime.UtcNow.ToString("o"));
+
+            await SendMailAsync(email, "Xác nhận đăng ký", $"Mã OTP của bạn là: {otp}");
+            return RedirectToAction("VerifyOtp");
+        }
         [AllowAnonymous]
         [HttpGet("VerifyOtp")]
         public IActionResult VerifyOtp() => View();
