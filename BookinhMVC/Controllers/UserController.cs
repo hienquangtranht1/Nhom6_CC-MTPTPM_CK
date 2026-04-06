@@ -452,6 +452,44 @@ namespace BookinhMVC.Controllers
             return View(patient);
         }
 
+        [HttpGet("UpdateProfile")]
+        public async Task<IActionResult> UpdateProfile()
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            if (userId == null) return RedirectToAction("Login");
+
+            var patient = await _context.BenhNhans.FindAsync(userId);
+            return View(patient);
+        }
+
+        [HttpPost("UpdateProfile")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> UpdateProfile(string hoTen, DateTime ngaySinh, string gioiTinh, string soDienThoai, string email, string diaChi, string soBaoHiem, IFormFile hinhAnhBenhNhan)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            if (userId == null) return RedirectToAction("Login");
+
+            var patient = await _context.BenhNhans.FindAsync(userId);
+
+            patient.HoTen = hoTen;
+            patient.NgaySinh = ngaySinh;
+            patient.GioiTinh = gioiTinh;
+            patient.SoDienThoai = soDienThoai;
+            patient.Email = email;
+            patient.DiaChi = diaChi;
+            patient.SoBaoHiem = soBaoHiem;
+
+            if (hinhAnhBenhNhan != null && hinhAnhBenhNhan.Length > 0)
+            {
+                var fileName = $"{Guid.NewGuid()}_{hinhAnhBenhNhan.FileName}";
+                var path = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", fileName);
+                using (var stream = new FileStream(path, FileMode.Create))
+                {
+                    await hinhAnhBenhNhan.CopyToAsync(stream);
+                }
+                patient.HinhAnhBenhNhan = fileName;
+            }
+
             await _context.SaveChangesAsync();
             TempData["Message"] = "Cập nhật hồ sơ thành công!";
             return RedirectToAction("Profile");
