@@ -51,7 +51,7 @@ jobs:
             docker rm nhom6-booking || true
             docker run -d \
               --name nhom6-booking \
-              -p 8080:80 \
+              -p 8080:8080 \
               --restart always \
               ${{ secrets.DOCKERHUB_USERNAME }}/nhom6-booking:latest
             echo "Deploy thanh cong!"
