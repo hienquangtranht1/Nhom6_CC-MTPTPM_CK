@@ -28,6 +28,14 @@ namespace BookinhMVC.Controllers
             ViewBag.DepartmentCount = _context.Khoas.AsNoTracking().Count();
             ViewBag.AppointmentCount = _context.LichHens.AsNoTracking().Count();
             ViewBag.ReviewCount = _context.DanhGias.AsNoTracking().Count();
+            // Thêm thống kê bài viết từ Demo 1
+            ViewBag.ArticleCount = _context.Articles.AsNoTracking().Count();
+            ViewBag.UserCount = _context.NguoiDungs.AsNoTracking().Count();
+            ViewBag.DoctorCount = _context.BacSis.AsNoTracking().Count();
+            ViewBag.PatientCount = _context.BenhNhans.AsNoTracking().Count();
+            ViewBag.DepartmentCount = _context.Khoas.AsNoTracking().Count();
+            ViewBag.AppointmentCount = _context.LichHens.AsNoTracking().Count();
+            ViewBag.ReviewCount = _context.DanhGias.AsNoTracking().Count();
             ViewBag.ArticleCount = _context.Articles.AsNoTracking().Count();
             return View();
         }
@@ -127,6 +135,7 @@ namespace BookinhMVC.Controllers
         // =========================================================
         public async Task<IActionResult> Patients()
         {
+            // Tối ưu hiệu năng bằng AsNoTracking cho danh sách lớn
             // Tối ưu hiệu năng bằng AsNoTracking cho danh sách lớn
             var patients = await _context.BenhNhans.AsNoTracking().ToListAsync();
             return View(patients);
