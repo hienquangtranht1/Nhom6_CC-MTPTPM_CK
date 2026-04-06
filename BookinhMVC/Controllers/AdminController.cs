@@ -342,6 +342,12 @@ namespace BookinhMVC.Controllers
                 .OrderByDescending(r => r.NgayDanhGia)
                 .AsNoTracking()
                 .ToListAsync();
+            var reviews = await _context.DanhGias
+                .Include(r => r.BacSi)
+                .Include(r => r.BenhNhan)
+                .OrderByDescending(r => r.NgayDanhGia)
+                .AsNoTracking()
+                .ToListAsync();
             return View(reviews);
         }
 
