@@ -58,7 +58,155 @@ namespace BookinhMVC.Controllers
         }
 
         // ===================================================================
-       
+       // 2. PROFILE MANAGEMENT
+        // ===================================================================
+        [HttpGet]
+        public async Task<IActionResult> Profile()
+        {
+            if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
+            var maNguoiDung = HttpContext.Session.GetInt32("DoctorId");
+            var maBacSi = HttpContext.Session.GetInt32("MaBacSi");
+
+            var bacSi = _context.Set<BacSi>()
+                .Include(b => b.Khoa)
+                .FirstOrDefault(b => b.MaNguoiDung == maNguoiDung);
+
+            if (bacSi == null) return RedirectToAction("Login");
+
+            // Load statistics
+            if (maBacSi.HasValue)
+            {
+                var today = DateTime.Today;
+                var appointmentsToday = await _context.LichHens
+                    .CountAsync(l => l.MaBacSi == maBacSi.Value && l.NgayGio.Date == today);
+                
+                var pendingQuestions = await _context.Questions
+                    .CountAsync(q => q.DoctorId == maBacSi.Value && string.IsNullOrEmpty(q.Answer));
+                
+                var totalAnswered = await _context.Questions
+                    .CountAsync(q => q.DoctorId == maBacSi.Value && !string.IsNullOrEmpty(q.Answer));
+
+                ViewBag.AppointmentsToday = appointmentsToday;
+                ViewBag.PendingQuestions = pendingQuestions;
+                ViewBag.TotalAnswered = totalAnswered;
+            }
+
+            return View(bacSi);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> UpdateProfile(int MaBacSi, string HoTen, string SoDienThoai, string Email, string MoTa, IFormFile profileImage)
+        {
+            var doctor = await _context.BacSis.FindAsync(MaBacSi);
+            if (doctor == null) return RedirectToAction("Profile");
+
+            doctor.HoTen = HoTen;
+            doctor.SoDienThoai = SoDienThoai;
+            doctor.Email = Email;
+            doctor.MoTa = MoTa;
+
+            if (profileImage != null && profileImage.Length > 0)
+            {
+                var webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                var uploadPath = Path.Combine(webRoot, "uploads");
+                if (!Directory.Exists(uploadPath)) Directory.CreateDirectory(uploadPath);
+
+                var fileName = $"{Guid.NewGuid()}_{Path.GetFileName(profileImage.FileName)}";
+                var filePath = Path.Combine(uploadPath, fileName);
+
+                using (var stream = new FileStream(filePath, FileMode.Create))
+                {
+                    await profileImage.CopyToAsync(stream);
+                }
+
+                if (!string.IsNullOrEmpty(doctor.HinhAnhBacSi) && doctor.HinhAnhBacSi != "default.jpg")
+                {
+                    var oldPath = Path.Combine(uploadPath, doctor.HinhAnhBacSi);
+                    if (System.IO.File.Exists(oldPath)) System.IO.File.Delete(oldPath);
+                }
+
+                doctor.HinhAnhBacSi = fileName;
+                HttpContext.Session.SetString("DoctorImage", fileName);
+            }
+
+            await _context.SaveChangesAsync();
+            TempData["Success"] = "Cập nhật thông tin thành công!";
+            return RedirectToAction("Profile");
+        }
+
+        [HttpGet]
+        public IActionResult ChangePassword()
+        {
+            if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
+            return View();
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> RequestChangePasswordOtp()
+        {
+            var doctorId = HttpContext.Session.GetInt32("DoctorId");
+            if (!IsDoctorLoggedIn()) return Json(new { success = false, message = "Chưa đăng nhập." });
+
+            var bacSi = await _context.BacSis.FirstOrDefaultAsync(b => b.MaNguoiDung == doctorId);
+
+            if (bacSi == null || string.IsNullOrEmpty(bacSi.Email)) return Json(new { success = false, message = "Không tìm thấy email." });
+
+            string otp = new Random().Next(100000, 999999).ToString();
+            HttpContext.Session.SetString("ChangePasswordOtp", otp);
+            HttpContext.Session.SetString("ChangePasswordOtpTime", DateTime.Now.ToString());
+
+            try
+            {
+                var smtpUser = "hienquangtranht1@gmail.com";
+                var smtpPass = "aigh nsyp dgyu emhc";
+                using var smtp = new SmtpClient("smtp.gmail.com", 587)
+                {
+                    Credentials = new NetworkCredential(smtpUser, smtpPass),
+                    EnableSsl = true
+                };
+                var mail = new MailMessage
+                {
+                    From = new MailAddress(smtpUser, "BỆNH VIỆN FOUR_ROCK"),
+                    Subject = "OTP Đổi mật khẩu",
+                    Body = $"Mã OTP của bạn là: {otp}"
+                };
+                mail.To.Add(bacSi.Email);
+                await smtp.SendMailAsync(mail);
+                return Json(new { success = true, message = "Đã gửi OTP." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = "Lỗi gửi mail: " + ex.Message });
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> ChangePassword(string oldPassword, string newPassword, string confirmPassword, string verificationCode)
+        {
+            if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
+            var doctorId = HttpContext.Session.GetInt32("DoctorId");
+            var doctor = await _context.NguoiDungs.FindAsync(doctorId);
+
+            var hasher = new PasswordHasher<NguoiDung>();
+            if (hasher.VerifyHashedPassword(doctor, doctor.MatKhau, oldPassword) != PasswordVerificationResult.Success)
+            {
+                TempData["cp_message"] = "Mật khẩu cũ sai.";
+                return RedirectToAction("ChangePassword");
+            }
+
+            var sessionOtp = HttpContext.Session.GetString("ChangePasswordOtp");
+            if (verificationCode != sessionOtp)
+            {
+                TempData["cp_message"] = "Mã OTP sai.";
+                return RedirectToAction("ChangePassword");
+            }
+
+            doctor.MatKhau = hasher.HashPassword(doctor, newPassword);
+            await _context.SaveChangesAsync();
+            TempData["cp_message"] = "Đổi mật khẩu thành công!";
+            return RedirectToAction("ChangePassword");
+        }
+
         
 
         // ===================================================================
@@ -402,6 +550,26 @@ namespace BookinhMVC.Controllers
             }
 
             // Redirect về trang Question
+            return RedirectToAction("Question");
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> DeleteQuestion(int questionId)
+        {
+            if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
+
+            var question = await _context.Questions.FindAsync(questionId);
+            if (question != null && question.DoctorId == HttpContext.Session.GetInt32("MaBacSi"))
+            {
+                _context.Questions.Remove(question);
+                await _context.SaveChangesAsync();
+                TempData["Success"] = "Xóa câu hỏi thành công!";
+            }
+            else
+            {
+                TempData["Error"] = "Không thể xóa câu hỏi này.";
+            }
+
             return RedirectToAction("Question");
         }
     }
