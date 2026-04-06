@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "D:\\demo2\\LTW_Do_An_Booking\\BookinhMVC\\BookinhMVC.csproj": {}
+    "C:\\Users\\VIET\\OneDrive\\Documents\\GitHub\\Nhom6_CC-MTPTPM_CK\\BookinhMVC\\BookinhMVC.csproj": {}
   },
   "projects": {
-    "D:\\demo2\\LTW_Do_An_Booking\\BookinhMVC\\BookinhMVC.csproj": {
+    "C:\\Users\\VIET\\OneDrive\\Documents\\GitHub\\Nhom6_CC-MTPTPM_CK\\BookinhMVC\\BookinhMVC.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\demo2\\LTW_Do_An_Booking\\BookinhMVC\\BookinhMVC.csproj",
+        "projectUniqueName": "C:\\Users\\VIET\\OneDrive\\Documents\\GitHub\\Nhom6_CC-MTPTPM_CK\\BookinhMVC\\BookinhMVC.csproj",
         "projectName": "BookinhMVC",
-        "projectPath": "D:\\demo2\\LTW_Do_An_Booking\\BookinhMVC\\BookinhMVC.csproj",
-        "packagesPath": "C:\\Users\\hienq\\.nuget\\packages\\",
-        "outputPath": "D:\\demo2\\LTW_Do_An_Booking\\BookinhMVC\\obj\\",
+        "projectPath": "C:\\Users\\VIET\\OneDrive\\Documents\\GitHub\\Nhom6_CC-MTPTPM_CK\\BookinhMVC\\BookinhMVC.csproj",
+        "packagesPath": "C:\\Users\\VIET\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\VIET\\OneDrive\\Documents\\GitHub\\Nhom6_CC-MTPTPM_CK\\BookinhMVC\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\hienq\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\VIET\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -26,7 +26,6 @@
         ],
         "sources": {
           "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
-          "C:\\Program Files\\dotnet\\library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -45,7 +44,7 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.300"
+        "SdkAnalysisLevel": "9.0.200"
       },
       "frameworks": {
         "net8.0": {
@@ -111,7 +110,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.305/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.201/PortableRuntimeIdentifierGraph.json"
         }
       }
     }
