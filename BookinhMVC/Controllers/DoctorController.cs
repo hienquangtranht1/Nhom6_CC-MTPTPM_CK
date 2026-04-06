@@ -46,7 +46,36 @@ namespace BookinhMVC.Controllers
             return user != null;
         }
 
-        
+        [HttpGet]
+        public IActionResult Login() => View("Login");
+
+        [HttpPost]
+        public IActionResult Login(string username, string password)
+        {
+            var user = _context.NguoiDungs.FirstOrDefault(u => u.TenDangNhap == username && u.VaiTro == "BacSi");
+            if (user != null)
+            {
+                var hasher = new PasswordHasher<NguoiDung>();
+                var result = hasher.VerifyHashedPassword(user, user.MatKhau, password);
+                if (result == PasswordVerificationResult.Success)
+                {
+                    HttpContext.Session.SetInt32("DoctorId", user.MaNguoiDung);
+                    HttpContext.Session.SetString("UserRole", "BacSi");
+                    HttpContext.Session.SetString("DoctorName", user.TenDangNhap);
+
+                    var bacSi = _context.BacSis.FirstOrDefault(b => b.MaNguoiDung == user.MaNguoiDung);
+                    if (bacSi != null)
+                    {
+                        HttpContext.Session.SetInt32("MaBacSi", bacSi.MaBacSi);
+                        HttpContext.Session.SetString("DoctorImage", bacSi.HinhAnhBacSi ?? "default.jpg");
+                    }
+                    return RedirectToAction("Appointments");
+                }
+            }
+            ViewBag.Error = "Sai tài khoản hoặc không phải bác sĩ.";
+            return View("Login");
+        }
+
         public IActionResult Logout()
         {
             HttpContext.Session.Remove("DoctorId");
@@ -58,7 +87,7 @@ namespace BookinhMVC.Controllers
         }
 
         // ===================================================================
-       // 2. PROFILE MANAGEMENT
+        // 2. PROFILE MANAGEMENT
         // ===================================================================
         [HttpGet]
         public async Task<IActionResult> Profile()
@@ -79,10 +108,10 @@ namespace BookinhMVC.Controllers
                 var today = DateTime.Today;
                 var appointmentsToday = await _context.LichHens
                     .CountAsync(l => l.MaBacSi == maBacSi.Value && l.NgayGio.Date == today);
-                
+
                 var pendingQuestions = await _context.Questions
                     .CountAsync(q => q.DoctorId == maBacSi.Value && string.IsNullOrEmpty(q.Answer));
-                
+
                 var totalAnswered = await _context.Questions
                     .CountAsync(q => q.DoctorId == maBacSi.Value && !string.IsNullOrEmpty(q.Answer));
 
@@ -207,12 +236,43 @@ namespace BookinhMVC.Controllers
             return RedirectToAction("ChangePassword");
         }
 
-        
-
         // ===================================================================
         // 3. APPOINTMENTS (MVC) - TÍCH HỢP SIGNALR
         // ===================================================================
-       
+        public async Task<IActionResult> Appointments(DateTime? date)
+        {
+            if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
+            var maBacSi = HttpContext.Session.GetInt32("MaBacSi");
+            var filterDate = date ?? DateTime.Today;
+            ViewData["FilterDate"] = filterDate.ToString("yyyy-MM-dd");
+
+            var workSchedules = await _context.Set<LichLamViec>()
+                .Where(lv => lv.MaBacSi == maBacSi && lv.NgayLamViec == filterDate.Date && lv.TrangThai == "Đã xác nhận")
+                .ToListAsync();
+
+            TimeSpan actualStartTime = workSchedules.Any() ? workSchedules.Min(lv => lv.GioBatDau) : new TimeSpan(7, 0, 0);
+            TimeSpan actualEndTime = workSchedules.Any() ? workSchedules.Max(lv => lv.GioKetThuc) : new TimeSpan(17, 30, 0);
+
+            ViewData["ActualStartTime"] = actualStartTime;
+            ViewData["ActualEndTime"] = actualEndTime;
+            ViewData["HasSchedule"] = workSchedules.Any();
+
+            var appointments = await (from lh in _context.Set<LichHen>()
+                                      join bn in _context.Set<BenhNhan>() on lh.MaBenhNhan equals bn.MaBenhNhan
+                                      where lh.MaBacSi == maBacSi && lh.NgayGio.Date == filterDate.Date
+                                      select new AppointmentViewModel
+                                      {
+                                          MaLich = lh.MaLich,
+                                          HoTenBenhNhan = bn.HoTen,
+                                          DiaChi = bn.DiaChi,
+                                          GioiTinh = bn.GioiTinh,
+                                          NgayGio = lh.NgayGio,
+                                          TrieuChung = lh.TrieuChung,
+                                          TrangThai = lh.TrangThai,
+                                      }).ToListAsync();
+
+            return View("Appointments", appointments.OrderBy(a => a.NgayGio).ToList());
+        }
 
         [HttpPost]
         public async Task<IActionResult> UpdateAppointment(int id, string status)
@@ -318,7 +378,8 @@ namespace BookinhMVC.Controllers
                 }
 
                 // Send NewNotification (so web clients update their notification list)
-                await _hubContext.Clients.Group($"User_{appointment.MaBenhNhan}").SendAsync("NewNotification", new {
+                await _hubContext.Clients.Group($"User_{appointment.MaBenhNhan}").SendAsync("NewNotification", new
+                {
                     id = notif.MaThongBao,
                     title = notif.TieuDe,
                     content = notif.NoiDung,
@@ -376,98 +437,9 @@ namespace BookinhMVC.Controllers
             return RedirectToAction("WorkSchedule", new { weekStart = date.AddDays(-(int)date.DayOfWeek + 1).ToString("yyyy-MM-dd") });
         }
 
-       
 
-        // ===================================================================
-        // 5. API ACTIONS
-        // ===================================================================
 
-        // GET: api/doctors?page=1&pageSize=10&search=abc
-        [HttpGet]
-        [Route("api/doctors")]
-        public async Task<IActionResult> GetDoctors(int page = 1, int pageSize = 10, string search = "")
-        {
-            var query = _context.BacSis
-                .Include(d => d.Khoa)
-                .Where(d => !string.IsNullOrEmpty(d.HoTen));
 
-            // 1. Filter by Name or Specialty
-            if (!string.IsNullOrEmpty(search))
-            {
-                search = search.ToLower().Trim();
-                query = query.Where(d => d.HoTen.ToLower().Contains(search) ||
-                                         (d.Khoa != null && d.Khoa.TenKhoa.ToLower().Contains(search)));
-            }
-
-            // 2. Pagination
-            var totalItems = await query.CountAsync();
-            var doctors = await query
-                .OrderByDescending(d => d.MaBacSi) // Sort new doctors first
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-
-            // 3. Map Data
-            var result = doctors.Select(d => new
-            {
-                id = d.MaBacSi,
-                name = d.HoTen,
-                specialty = d.Khoa?.TenKhoa ?? "Chuyên khoa khác",
-                imageUrl = BuildRelativeImagePathIfExists(d.MaBacSi, d.HinhAnhBacSi),
-                phone = d.SoDienThoai
-            }).ToList();
-
-            return Ok(new
-            {
-                data = result,
-                total = totalItems,
-                page = page,
-                hasNext = (page * pageSize) < totalItems
-            });
-        }
-
-        [HttpGet]
-        [Route("api/doctors/featured")]
-        public async Task<IActionResult> GetFeaturedDoctors()
-        {
-            var list = await _context.BacSis.Include(d => d.Khoa).Where(d => !string.IsNullOrEmpty(d.HoTen)).OrderBy(d => Guid.NewGuid()).Take(6).ToListAsync();
-            var result = list.Select(d =>
-            {
-                var imgPath = BuildRelativeImagePathIfExists(d.MaBacSi, d.HinhAnhBacSi);
-                return new { id = d.MaBacSi, name = d.HoTen, specialty = d.Khoa?.TenKhoa ?? "", phone = d.SoDienThoai, email = d.Email, description = d.MoTa, imageUrl = imgPath };
-            }).ToList();
-            return Ok(result);
-        }
-
-        [HttpGet]
-        [Route("api/doctors/{id}")]
-        public async Task<IActionResult> GetDoctor(int id)
-        {
-            var d = await _context.BacSis.Include(b => b.Khoa).FirstOrDefaultAsync(b => b.MaBacSi == id);
-            if (d == null) return NotFound();
-            var imgPath = BuildRelativeImagePathIfExists(d.MaBacSi, d.HinhAnhBacSi);
-            var result = new { id = d.MaBacSi, name = d.HoTen, specialty = d.Khoa?.TenKhoa ?? "", phone = d.SoDienThoai, email = d.Email, description = d.MoTa, imageUrl = imgPath };
-            return Ok(result);
-        }
-
-        private string? BuildRelativeImagePathIfExists(int maBacSi, string? storedFileName)
-        {
-            var webRoot = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-            var uploadsFolder = Path.Combine(webRoot, "uploads");
-            if (!Directory.Exists(uploadsFolder)) return null;
-            if (!string.IsNullOrEmpty(storedFileName))
-            {
-                var path = Path.Combine(uploadsFolder, storedFileName);
-                if (System.IO.File.Exists(path)) return $"/uploads/{storedFileName}";
-            }
-            var exts = new[] { ".png", ".jpg", ".jpeg" };
-            foreach (var ext in exts)
-            {
-                var file = Path.Combine(uploadsFolder, $"{maBacSi}{ext}");
-                if (System.IO.File.Exists(file)) return $"/uploads/{maBacSi}{ext}";
-            }
-            return null;
-        }
 
         // ===================================================================
         // 6. QA & HELPERS (EMAIL, QR)
@@ -510,67 +482,6 @@ namespace BookinhMVC.Controllers
             await smtp.SendMailAsync(mail);
         }
 
-        [HttpGet]
-        public async Task<IActionResult> Question()
-        {
-            if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
 
-            var maBacSi = HttpContext.Session.GetInt32("MaBacSi");
-
-            // Lấy danh sách câu hỏi gửi đến bác sĩ này, bao gồm cả thông tin người hỏi
-            var questions = await _context.Questions
-                .Include(q => q.User) // Include User để lấy tên bệnh nhân
-                .Where(q => q.DoctorId == maBacSi)
-                .OrderByDescending(q => q.CreatedAt) // Mới nhất lên đầu
-                .ToListAsync();
-
-            return View(questions);
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> Answer(int questionId, string answer)
-        {
-            if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
-
-            var q = await _context.Questions.FindAsync(questionId);
-            if (q != null)
-            {
-                q.Answer = answer;
-                q.Status = "Đã trả lời";
-                q.AnsweredAt = DateTime.Now; // Lưu thời gian trả lời
-
-                _context.Questions.Update(q);
-                await _context.SaveChangesAsync();
-
-                TempData["Success"] = "Đã gửi câu trả lời thành công!";
-            }
-            else
-            {
-                TempData["Error"] = "Không tìm thấy câu hỏi.";
-            }
-
-            // Redirect về trang Question
-            return RedirectToAction("Question");
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> DeleteQuestion(int questionId)
-        {
-            if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
-
-            var question = await _context.Questions.FindAsync(questionId);
-            if (question != null && question.DoctorId == HttpContext.Session.GetInt32("MaBacSi"))
-            {
-                _context.Questions.Remove(question);
-                await _context.SaveChangesAsync();
-                TempData["Success"] = "Xóa câu hỏi thành công!";
-            }
-            else
-            {
-                TempData["Error"] = "Không thể xóa câu hỏi này.";
-            }
-
-            return RedirectToAction("Question");
-        }
     }
 }
