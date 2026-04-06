@@ -33,9 +33,10 @@ builder.Services.AddHttpContextAccessor(); // Cho phép truy cập Session/User 
 // 1.3 Đăng ký Background Service (Nhắc lịch hẹn tự động)
 builder.Services.AddHostedService<AppointmentReminderService>();
 
-// 1.4 Kết nối Database SQL Server
+// 1.4 Kết nối Database MySQL
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<BookingContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+    options.UseMySql(connectionString, ServerVersion.Parse("8.0.0-mysql"))
 );
 
 // 1.5 Cấu hình Cookie Authentication (Giữ đăng nhập cho Web & API qua Session)
