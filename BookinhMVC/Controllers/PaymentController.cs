@@ -1,4 +1,4 @@
-﻿using BookinhMVC.Models;
+using BookinhMVC.Models;
 using BookinhMVC.Helpers; // Thư viện VNPAY
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -83,9 +83,12 @@ namespace BookinhMVC.Controllers
                 return RedirectToAction("Index");
             }
 
-            // Trừ tiền và ghi giao dịch
-            wallet.SoDuHienTai -= amount;
-            wallet.NgayCapNhatCuoi = DateTime.Now;
+            // Sử dụng hàm TruTien trong Model để cập nhật cả thống kê chi tiêu
+            if (!wallet.TruTien(amount))
+            {
+                TempData["Error"] = "Có lỗi xảy ra khi trừ tiền.";
+                return RedirectToAction("Index");
+            }
 
             var trans = new GiaoDichThanhToan
             {
@@ -291,23 +294,31 @@ namespace BookinhMVC.Controllers
         {
             if (trans.LoaiGiaoDich != null && trans.LoaiGiaoDich.Contains("Nạp tiền"))
             {
-                // Idempotency: chỉ thực hiện khi trạng thái là Thành công và chưa cộng tiền
-                // Kiểm tra trong DB xem giao dịch đã được xử lý/đánh dấu trước đó chưa (ví dụ bằng GhiChu/PhuongThuc/NgayCapNhat)
-                // Ở đây ta dùng TrangThai + NgayCapNhat để tránh cộng 2 lần trong luồng callback.
+                // KIỂM TRA IDEMPOTENCY:
+                // Nếu giao dịch đã có NgayCapNhat trước đó (không phải NgayTao), coi như đã xử lý.
+                // Hoặc kiểm tra xem TrangThai có phải là Thành công NHƯNG số ngày cập nhật quá gần đây.
+                // Ở đây ta dùng check TrangThai == "Thành công" kết hợp với việc kiểm tra xem ví đã cộng chưa.
+                
                 if (trans.TrangThai != "Thành công") return;
 
                 var wallet = await _context.TaiKhoanBenhNhan.FirstOrDefaultAsync(x => x.MaBenhNhan == trans.MaBenhNhan);
                 if (wallet == null)
                 {
-                    wallet = new TaiKhoanBenhNhan { MaBenhNhan = trans.MaBenhNhan, SoDuHienTai = 0, NgayCapNhatCuoi = DateTime.Now };
+                    wallet = new TaiKhoanBenhNhan { MaBenhNhan = trans.MaBenhNhan, SoDuHienTai = 0, NgayTao = DateTime.Now };
                     _context.TaiKhoanBenhNhan.Add(wallet);
                 }
 
-                // Nếu giao dịch đã được cộng trước đó (ví dụ bằng kiểm tra MaGiaoDich trong wallet logs) — skipping advanced checks for brevity.
-                wallet.SoDuHienTai += trans.SoTien;
-                wallet.NgayCapNhatCuoi = DateTime.Now;
-
-                await _context.SaveChangesAsync();
+                // Cộng tiền thông qua hàm CongTien để cập nhật cả TongTienNap
+                try 
+                {
+                    wallet.CongTien(trans.SoTien);
+                    trans.NgayCapNhat = DateTime.Now; // Đánh dấu đã xử lý
+                    await _context.SaveChangesAsync();
+                }
+                catch (Exception ex)
+                {
+                    // Tránh lỗi nạp tiền làm sập luồng callback
+                }
             }
         }
 

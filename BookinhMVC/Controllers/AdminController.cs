@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using BookinhMVC.Models;
 using Microsoft.EntityFrameworkCore;
@@ -117,17 +117,14 @@ namespace BookinhMVC.Controllers
         [HttpPost]
         public async Task<IActionResult> EditDepartment(int id, string tenKhoa, string moTa)
         {
-            var existing = await _context.Khoas.AsNoTracking().FirstOrDefaultAsync(k => k.MaKhoa == id);
+            var existing = await _context.Khoas.FindAsync(id);
             if (existing == null) return NotFound();
-            var model = new Khoa
-            {
-                MaKhoa = id,
-                TenKhoa = tenKhoa,
-                MoTa = moTa,
-                NgayTao = existing.NgayTao
-            };
-            _context.Khoas.Update(model);
+
+            existing.TenKhoa = tenKhoa;
+            existing.MoTa = moTa;
+            
             await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = "Cập nhật khoa thành công!";
             return RedirectToAction("Departments");
         }
 
@@ -194,23 +191,20 @@ namespace BookinhMVC.Controllers
         [HttpPost]
         public async Task<IActionResult> EditUser(int id, string tenDangNhap, string vaiTro, string newPassword)
         {
-            var existing = await _context.NguoiDungs.AsNoTracking().FirstOrDefaultAsync(u => u.MaNguoiDung == id);
+            var existing = await _context.NguoiDungs.FindAsync(id);
             if (existing == null) return NotFound();
-            var model = new NguoiDung
-            {
-                MaNguoiDung = id,
-                TenDangNhap = tenDangNhap,
-                VaiTro = vaiTro,
-                NgayTao = existing.NgayTao,
-                MatKhau = existing.MatKhau
-            };
+
+            existing.TenDangNhap = tenDangNhap;
+            existing.VaiTro = vaiTro;
+            
             if (!string.IsNullOrEmpty(newPassword))
             {
                 var hasher = new PasswordHasher<NguoiDung>();
-                model.MatKhau = hasher.HashPassword(model, newPassword);
+                existing.MatKhau = hasher.HashPassword(existing, newPassword);
             }
-            _context.NguoiDungs.Update(model);
+
             await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = "Cập nhật người dùng thành công!";
             return RedirectToAction("Users");
         }
 
@@ -314,36 +308,30 @@ namespace BookinhMVC.Controllers
         [HttpPost]
         public async Task<IActionResult> EditDoctor(int id, int maNguoiDung, string hoTen, int maKhoa, string soDienThoai, string email, string hinhAnhBacSi, string moTa, IFormFile file)
         {
-            var existing = await _context.BacSis.AsNoTracking().FirstOrDefaultAsync(b => b.MaBacSi == id);
+            var existing = await _context.BacSis.FindAsync(id);
             if (existing == null) return NotFound();
 
-            string fileName = hinhAnhBacSi;
             if (file != null && file.Length > 0)
             {
                 var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads");
                 if (!Directory.Exists(uploads)) Directory.CreateDirectory(uploads);
 
-                fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
+                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
                 using (var stream = new FileStream(Path.Combine(uploads, fileName), FileMode.Create))
                 {
                     await file.CopyToAsync(stream);
                 }
+                existing.HinhAnhBacSi = fileName;
             }
 
-            var model = new BacSi
-            {
-                MaBacSi = id,
-                MaNguoiDung = maNguoiDung,
-                HoTen = hoTen,
-                MaKhoa = maKhoa,
-                SoDienThoai = soDienThoai,
-                Email = email,
-                HinhAnhBacSi = fileName,
-                MoTa = moTa,
-                NgayTao = existing.NgayTao
-            };
-            _context.BacSis.Update(model);
+            existing.HoTen = hoTen;
+            existing.MaKhoa = maKhoa;
+            existing.SoDienThoai = soDienThoai;
+            existing.Email = email;
+            existing.MoTa = moTa;
+
             await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = "Cập nhật bác sĩ thành công!";
             return RedirectToAction("Doctors");
         }
 
@@ -451,19 +439,18 @@ namespace BookinhMVC.Controllers
             var patient = await _context.BenhNhans.FindAsync(id);
             if (patient == null) return NotFound();
 
-            string fileName = form["hinhAnhBenhNhan"];
             if (file != null && file.Length > 0)
             {
-                fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
+                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(file.FileName);
                 var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads");
                 if (!Directory.Exists(uploads)) Directory.CreateDirectory(uploads);
                 using (var stream = new FileStream(Path.Combine(uploads, fileName), FileMode.Create))
                 {
                     await file.CopyToAsync(stream);
                 }
+                patient.HinhAnhBenhNhan = fileName;
             }
 
-            patient.HinhAnhBenhNhan = fileName;
             patient.HoTen = form["hoTen"];
             patient.NgaySinh = DateTime.Parse(form["ngaySinh"]);
             patient.GioiTinh = form["gioiTinh"];
@@ -472,8 +459,8 @@ namespace BookinhMVC.Controllers
             patient.DiaChi = form["diaChi"];
             patient.SoBaoHiem = form["soBaoHiem"];
 
-            _context.BenhNhans.Update(patient);
             await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = "Cập nhật bệnh nhân thành công!";
             return RedirectToAction("Patients");
         }
 
@@ -1015,10 +1002,9 @@ namespace BookinhMVC.Controllers
             ModelState.Remove("Category");
             ModelState.Remove("FeatureImageUrl");
 
-            var existingArticle = await _context.Articles.FindAsync(model.ArticleId);
-            if (existingArticle == null) return NotFound();
+            var existing = await _context.Articles.FindAsync(model.ArticleId);
+            if (existing == null) return NotFound();
 
-            string fileName = existingArticle.FeatureImageUrl;
             if (featureImage != null && featureImage.Length > 0)
             {
                 var uploads = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/uploads/blog");
@@ -1029,17 +1015,16 @@ namespace BookinhMVC.Controllers
                 {
                     await featureImage.CopyToAsync(stream);
                 }
-                fileName = "/uploads/blog/" + newFileName;
+                existing.FeatureImageUrl = "/uploads/blog/" + newFileName;
             }
 
-            existingArticle.Title = model.Title;
-            existingArticle.Slug = model.Slug;
-            existingArticle.Summary = model.Summary;
-            existingArticle.Content = model.Content;
-            existingArticle.CategoryId = model.CategoryId;
-            existingArticle.AuthorId = model.AuthorId;
-            existingArticle.IsPublished = model.IsPublished;
-            existingArticle.FeatureImageUrl = fileName;
+            existing.Title = model.Title;
+            existing.Slug = model.Slug;
+            existing.Summary = model.Summary;
+            existing.Content = model.Content;
+            existing.CategoryId = model.CategoryId;
+            existing.AuthorId = model.AuthorId;
+            existing.IsPublished = model.IsPublished;
 
             await _context.SaveChangesAsync();
             TempData["SuccessMessage"] = "Cập nhật bài viết thành công!";
@@ -1081,7 +1066,6 @@ namespace BookinhMVC.Controllers
             return View();
         }
 
-        // -- HANDLE CREATE POST --
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> CreateCSKH(string username, string password, string fullName, string email, string phone)
@@ -1110,12 +1094,15 @@ namespace BookinhMVC.Controllers
             var cskh = new CsKh
             {
                 Username = username.Trim(),
-                Password = password, // Note: existing login compares plain text; keep same format as seed data.
                 FullName = fullName?.Trim(),
                 Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(),
                 Phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim(),
                 CreatedAt = DateTime.Now
             };
+
+            // Hash password
+            var hasher = new PasswordHasher<CsKh>();
+            cskh.Password = hasher.HashPassword(cskh, password);
 
             _context.CsKhs.Add(cskh);
             await _context.SaveChangesAsync();
@@ -1175,7 +1162,6 @@ namespace BookinhMVC.Controllers
 
             if (!ModelState.IsValid)
             {
-                // return view populated with existing values (so user doesn't lose data)
                 existing.Username = username;
                 existing.FullName = fullName;
                 existing.Email = email;
@@ -1184,16 +1170,15 @@ namespace BookinhMVC.Controllers
             }
 
             existing.Username = username.Trim();
-            // Keep current password if admin leaves the password field empty.
             if (!string.IsNullOrEmpty(password))
             {
-                existing.Password = password;
+                var hasher = new PasswordHasher<CsKh>();
+                existing.Password = hasher.HashPassword(existing, password);
             }
             existing.FullName = string.IsNullOrWhiteSpace(fullName) ? null : fullName.Trim();
             existing.Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
             existing.Phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim();
 
-            _context.CsKhs.Update(existing);
             await _context.SaveChangesAsync();
 
             TempData["SuccessMessage"] = "Cập nhật CSKH thành công.";
