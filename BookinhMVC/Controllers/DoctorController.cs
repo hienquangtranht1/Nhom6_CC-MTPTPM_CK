@@ -48,6 +48,8 @@ namespace BookinhMVC.Controllers
 
         [HttpGet]
         public IActionResult Login() => View("Login");
+feature/HuynhThanhPhuc-2280602431/user-doctor
+
 
         [HttpPost]
         public IActionResult Login(string username, string password)
@@ -273,61 +275,32 @@ namespace BookinhMVC.Controllers
 
             return View("Appointments", appointments.OrderBy(a => a.NgayGio).ToList());
         }
+ develop
 
         [HttpPost]
-        public async Task<IActionResult> UpdateAppointment(int id, string status)
+        public IActionResult Login(string username, string password)
         {
-            if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
-
-            var appointment = await _context.Set<LichHen>()
-                .Include(l => l.BenhNhan)
-                .Include(l => l.BacSi)
-                .FirstOrDefaultAsync(l => l.MaLich == id);
-
-            if (appointment != null)
+            var user = _context.NguoiDungs.FirstOrDefault(u => u.TenDangNhap == username && u.VaiTro == "BacSi");
+            if (user != null)
             {
-                // Prevent cancellation when appointment already paid
-                if (string.Equals(status?.Trim(), "Đã hủy", StringComparison.OrdinalIgnoreCase))
+                var hasher = new PasswordHasher<NguoiDung>();
+                var result = hasher.VerifyHashedPassword(user, user.MatKhau, password);
+                if (result == PasswordVerificationResult.Success)
                 {
-                    var hasPaid = await _context.GiaoDichThanhToan
-                        .AnyAsync(g => g.MaLich == appointment.MaLich
-                                       && g.MaBenhNhan == appointment.MaBenhNhan
-                                       && g.LoaiGiaoDich == "Thanh toán lịch hẹn"
-                                       && g.TrangThai == "Thành công");
+                    HttpContext.Session.SetInt32("DoctorId", user.MaNguoiDung);
+                    HttpContext.Session.SetString("UserRole", "BacSi");
+                    HttpContext.Session.SetString("DoctorName", user.TenDangNhap);
 
-                    if (hasPaid)
+                    var bacSi = _context.BacSis.FirstOrDefault(b => b.MaNguoiDung == user.MaNguoiDung);
+                    if (bacSi != null)
                     {
-                        TempData["Error"] = "Lịch này đã được thanh toán nên không thể hủy.";
-
-                        // Notify the doctor (target the doctor's user account) so their other devices / sessions also get a realtime notification
-                        var doctorUserId = appointment.BacSi?.MaNguoiDung;
-                        if (doctorUserId != null)
-                        {
-                            var notifDoctor = new ThongBao
-                            {
-                                MaNguoiDung = doctorUserId.Value,
-                                TieuDe = "Không thể hủy - Đã thanh toán",
-                                NoiDung = $"Lịch #{appointment.MaLich} đã được thanh toán và không thể hủy.",
-                                NgayTao = DateTime.Now,
-                                MaLichHen = appointment.MaLich,
-                                DaXem = false
-                            };
-                            _context.Add(notifDoctor);
-                            await _context.SaveChangesAsync();
-
-                            await _hubContext.Clients.Group($"User_{doctorUserId.Value}").SendAsync("NewNotification", new
-                            {
-                                id = notifDoctor.MaThongBao,
-                                title = notifDoctor.TieuDe,
-                                content = notifDoctor.NoiDung,
-                                createdAt = notifDoctor.NgayTao,
-                                appointmentId = notifDoctor.MaLichHen
-                            });
-                        }
-
-                        return RedirectToAction("Appointments", new { date = appointment.NgayGio.ToString("yyyy-MM-dd") });
+                        HttpContext.Session.SetInt32("MaBacSi", bacSi.MaBacSi);
+                        HttpContext.Session.SetString("DoctorImage", bacSi.HinhAnhBacSi ?? "default.jpg");
                     }
+                    return RedirectToAction("Appointments");
                 }
+ feature/HuynhThanhPhuc-2280602431/user-doctor
+
 
                 bool isConfirmedNow = (appointment.TrangThai != "Đã xác nhận" && status == "Đã xác nhận");
                 appointment.TrangThai = status;
@@ -386,11 +359,45 @@ namespace BookinhMVC.Controllers
                     createdAt = notif.NgayTao,
                     appointmentId = notif.MaLichHen
                 });
+ develop
             }
-            return RedirectToAction("Appointments", new { date = appointment?.NgayGio.ToString("yyyy-MM-dd") });
+            ViewBag.Error = "Sai tài khoản hoặc không phải bác sĩ.";
+            return View("Login");
         }
 
-        // ===================================================================
+ feature/HuynhThanhPhuc-2280602431/user-doctor
+    }
+    public IActionResult MedicalRecords(string search)
+    {
+        if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
+        var maBacSi = HttpContext.Session.GetInt32("MaBacSi");
+
+        var query = _context.Set<HoSoBenhAn>()
+            .Include(h => h.BenhNhan)
+            .Include(h => h.BacSi)
+            .Where(h => h.MaBacSi == maBacSi);
+
+        if (!string.IsNullOrEmpty(search))
+            query = query.Where(h => h.BenhNhan.HoTen.Contains(search));
+
+        var records = query.Select(h => new MedicalRecordViewModel
+        {
+            MaHoSo = h.MaHoSo,
+            TenBenhNhan = h.BenhNhan.HoTen,
+            TenBacSi = h.BacSi.HoTen,
+            NgayKham = h.NgayKham,
+            ChanDoan = h.ChanDoan,
+            PhuongAnDieuTri = h.PhuongAnDieuTri
+        }).ToList();
+
+        return View("MedicalRecords", records);
+    }
+    [HttpPost]
+    public async Task<IActionResult> Answer(int questionId, string answer)
+    {
+
+        if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
+       // ===================================================================
         // 4. WORK SCHEDULE & MEDICAL RECORDS
         // ===================================================================
         public IActionResult WorkSchedule(DateTime? weekStart)
@@ -440,48 +447,32 @@ namespace BookinhMVC.Controllers
 
 
 
+ develop
 
-        // ===================================================================
-        // 6. QA & HELPERS (EMAIL, QR)
-        // ===================================================================
-        private string GenerateQrCodeAsBase64(string text)
+        var q = await _context.Questions.FindAsync(questionId);
+        if (q != null)
         {
-            QRCodeGenerator qrGenerator = new QRCodeGenerator();
-            QRCodeData qrCodeData = qrGenerator.CreateQrCode(text, QRCodeGenerator.ECCLevel.Q);
-            PngByteQRCode qrCode = new PngByteQRCode(qrCodeData);
-            byte[] qrCodeBytes = qrCode.GetGraphic(20);
-            return Convert.ToBase64String(qrCodeBytes);
+            q.Answer = answer;
+            q.Status = "Đã trả lời";
+            q.AnsweredAt = DateTime.Now; // Lưu thời gian trả lời
+
+            _context.Questions.Update(q);
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Đã gửi câu trả lời thành công!";
+        }
+ feature/HuynhThanhPhuc-2280602431/user-doctor
+        else
+        {
+            TempData["Error"] = "Không tìm thấy câu hỏi.";
         }
 
-        private async Task SendConfirmationEmailAsync(string toEmail, string patientName, string doctorName, string time, string qrBase64)
-        {
-            var smtpUser = "hienquangtranht1@gmail.com";
-            var smtpPass = "aigh nsyp dgyu emhc";
-            var mail = new MailMessage();
-            mail.From = new MailAddress(smtpUser, "Four Rock Hospital");
-            mail.To.Add(toEmail);
-            mail.Subject = "Xác nhận lịch hẹn";
-            mail.IsBodyHtml = true;
-            string htmlBody = $"<h3>Xin chào {patientName},</h3><p>Lịch hẹn với BS {doctorName} lúc {time} đã được xác nhận.</p><img src='cid:qrImage' style='width:200px;'/>";
-            var view = AlternateView.CreateAlternateViewFromString(htmlBody, Encoding.UTF8, "text/html");
-            var qrBytes = Convert.FromBase64String(qrBase64);
-            var linked = new LinkedResource(new MemoryStream(qrBytes), "image/png") { ContentId = "qrImage" };
-            view.LinkedResources.Add(linked);
-            mail.AlternateViews.Add(view);
-            using var smtp = new SmtpClient("smtp.gmail.com", 587) { Credentials = new NetworkCredential(smtpUser, smtpPass), EnableSsl = true };
-            await smtp.SendMailAsync(mail);
-        }
-
-        private async Task SendStatusUpdateEmailAsync(string toEmail, string patientName, string doctorName, string time, string status)
-        {
-            var smtpUser = "hienquangtranht1@gmail.com";
-            var smtpPass = "aigh nsyp dgyu emhc";
-            using var smtp = new SmtpClient("smtp.gmail.com", 587) { Credentials = new NetworkCredential(smtpUser, smtpPass), EnableSsl = true };
-            var mail = new MailMessage { From = new MailAddress(smtpUser, "Four Rock Hospital"), Subject = $"Cập nhật lịch hẹn: {status}", Body = $"Xin chào {patientName},\nLịch hẹn với BS {doctorName} lúc {time} đã chuyển sang trạng thái: {status}.", IsBodyHtml = false };
-            mail.To.Add(toEmail);
-            await smtp.SendMailAsync(mail);
-        }
+        // Redirect về trang Question
+        return RedirectToAction("Question");
 
 
+
+ develop
     }
 }
+    
