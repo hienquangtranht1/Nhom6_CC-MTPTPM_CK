@@ -22,14 +22,13 @@ namespace BookinhMVC.Controllers
         // 3. DASHBOARD
         public IActionResult Index()
         {
-            ViewBag.UserCount = _context.NguoiDungs.Count();
-            ViewBag.DoctorCount = _context.BacSis.Count();
-            ViewBag.PatientCount = _context.BenhNhans.Count();
-            ViewBag.DepartmentCount = _context.Khoas.Count();
-            ViewBag.AppointmentCount = _context.LichHens.Count();
-            ViewBag.ReviewCount = _context.DanhGias.Count();
-            // Thêm thống kê bài viết từ Demo 1
-            ViewBag.ArticleCount = _context.Articles.Count();
+            ViewBag.UserCount = _context.NguoiDungs.AsNoTracking().Count();
+            ViewBag.DoctorCount = _context.BacSis.AsNoTracking().Count();
+            ViewBag.PatientCount = _context.BenhNhans.AsNoTracking().Count();
+            ViewBag.DepartmentCount = _context.Khoas.AsNoTracking().Count();
+            ViewBag.AppointmentCount = _context.LichHens.AsNoTracking().Count();
+            ViewBag.ReviewCount = _context.DanhGias.AsNoTracking().Count();
+            ViewBag.ArticleCount = _context.Articles.AsNoTracking().Count();
             return View();
         }
 
