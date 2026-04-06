@@ -1,0 +1,258 @@
+﻿@* File: Views/User/Register.cshtml *@
+@{
+    ViewData["Title"] = "Đăng ký tài khoản";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var error = ViewData["Error"] as string;
+}
+
+<div class="container my-5 pt-5">
+    <div class="register-container mx-auto col-lg-8 col-md-10 col-sm-12 p-4 p-md-5 rounded-4 shadow-lg bg-white" data-aos="fade-up">
+        <h2 class="text-center mb-4 fw-bold text-primary">
+            <i class="fas fa-user-plus me-2"></i> Đăng ký tài khoản Bệnh nhân
+        </h2>
+        <p class="text-center text-secondary mb-4">Vui lòng điền đầy đủ thông tin để tạo tài khoản khám chữa bệnh tại Four Rock Hospital.</p>
+
+        @* Hiển thị lỗi Server-side (Nếu có, ví dụ: sau khi quay lại từ VerifyOtp) *@
+        @if (!ViewData.ModelState.IsValid && ViewData.ModelState.Values.Any(v => v.Errors.Count > 0))
+        {
+            <div class="alert alert-danger rounded-3">
+                <i class="fas fa-times-circle me-2"></i>
+                Có lỗi xảy ra:
+                @foreach (var modelError in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    <div class="ms-3">- @modelError.ErrorMessage</div>
+                }
+            </div>
+        }
+
+        @* FORM ĐĂNG KÝ *@
+        <form asp-controller="User" asp-action="Register" method="post" class="row g-4">
+
+            <h5 class="fw-bold text-dark mt-4 border-bottom pb-2"><i class="fas fa-id-card me-2 text-info"></i> Thông tin truy cập</h5>
+
+            <div class="col-md-6">
+                <label for="username" class="form-label fw-medium">Tên đăng nhập (<span class="text-danger">*</span>)</label>
+                @* Require alphanumeric, at least one letter, no spaces, 4-50 chars *@
+                <input type="text" class="form-control rounded-3 py-2" id="username" name="username"
+                       required minlength="4" maxlength="50"
+                       pattern="^(?=.*[A-Za-z])[A-Za-z0-9]{4,50}$"
+                       title="Tên đăng nhập: chữ và số, không có khoảng trắng, có ít nhất 1 chữ cái, 4-50 ký tự." />
+                @* Vùng hiển thị lỗi AJAX *@
+                <div class="text-danger mt-1 validation-error" id="username-error"></div>
+            </div>
+            <div class="col-md-6">
+                <label for="password" class="form-label fw-medium">Mật khẩu (<span class="text-danger">*</span>)</label>
+                @* Require min 6, at least one digit and one special char *@
+                <input type="password" class="form-control rounded-3 py-2" id="password" name="password"
+                       required minlength="6" maxlength="100"
+                       pattern="^(?=.{6,100}$)(?=.*\d)(?=.*\W).*$"
+                       title="Mật khẩu phải ít nhất 6 ký tự, chứa chữ số và ký tự đặc biệt." />
+                @* Vùng hiển thị lỗi MỚI *@
+                <div class="text-danger mt-1 validation-error" id="password-error"></div>
+            </div>
+
+            <h5 class="fw-bold text-dark mt-4 border-bottom pb-2"><i class="fas fa-user me-2 text-info"></i> Thông tin cá nhân</h5>
+
+            <div class="col-md-6">
+                <label for="fullname" class="form-label fw-medium">Họ và tên (<span class="text-danger">*</span>)</label>
+                <input type="text" class="form-control rounded-3 py-2" id="fullname" name="fullname"
+                       required maxlength="100"
+                       title="Vui lòng nhập họ và tên đầy đủ." />
+            </div>
+            <div class="col-md-6">
+                <label for="dob" class="form-label fw-medium">Ngày sinh (<span class="text-danger">*</span>)</label>
+                <input type="date" class="form-control rounded-3 py-2" id="dob" name="dob"
+                       required max="@DateTime.Today.ToString("yyyy-MM-dd")"
+                       title="Ngày sinh không thể là ngày trong tương lai." />
+            </div>
+
+            <div class="col-md-6">
+                <label for="gender" class="form-label fw-medium">Giới tính (<span class="text-danger">*</span>)</label>
+                <select class="form-select rounded-3 py-2" id="gender" name="gender" required>
+                    <option value="Nam">Nam</option>
+                    <option value="Nữ">Nữ</option>
+                    <option value="Khác">Khác</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="soBaoHiem" class="form-label fw-medium">Bảo hiểm Y tế (<span class="text-danger">*</span>)</label>
+                @* Exactly 10 digits required *@
+                <input type="text" class="form-control rounded-3 py-2" id="soBaoHiem" name="soBaoHiem"
+                       placeholder="Số BHYT (10 chữ số)" required minlength="10" maxlength="10"
+                       pattern="^\d{10}$"
+                       title="Số BHYT phải có đúng 10 chữ số." />
+                @* Vùng hiển thị lỗi AJAX *@
+                <div class="text-danger mt-1 validation-error" id="sobaohiem-error"></div>
+            </div>
+
+            <h5 class="fw-bold text-dark mt-4 border-bottom pb-2"><i class="fas fa-address-book me-2 text-info"></i> Thông tin liên hệ</h5>
+
+            <div class="col-md-6">
+                <label for="phone" class="form-label fw-medium">Số điện thoại (<span class="text-danger">*</span>)</label>
+                <input type="tel" class="form-control rounded-3 py-2" id="phone" name="phone"
+                       required minlength="10" maxlength="10"
+                       pattern="^0\d{9}$"
+                       title="Phải có 10 chữ số và bắt đầu bằng 0 (VD: 0987654321)." />
+                @* Vùng hiển thị lỗi AJAX *@
+                <div class="text-danger mt-1 validation-error" id="phone-error"></div>
+            </div>
+            <div class="col-md-6">
+                <label for="email" class="form-label fw-medium">Email (<span class="text-danger">*</span>)</label>
+                <input type="email" class="form-control rounded-3 py-2" id="email" name="email"
+                       required maxlength="100"
+                       title="Vui lòng nhập định dạng email hợp lệ.(example@gmail.com)" />
+                @* Vùng hiển thị lỗi AJAX *@
+                <div class="text-danger mt-1 validation-error" id="email-error"></div>
+            </div>
+            <div class="col-12">
+                <label for="address" class="form-label fw-medium">Địa chỉ</label>
+                <input type="text" class="form-control rounded-3 py-2" id="address" name="address"
+                       placeholder="Địa chỉ hiện tại" maxlength="255"
+                       title="Địa chỉ không được quá 255 ký tự." />
+            </div>
+
+            <div class="col-12 text-center mt-5">
+
+                <button type="submit" class="btn btn-primary btn-lg rounded-pill px-5 fw-bold me-3">
+                    <i class="fas fa-check-circle me-2"></i> Gửi đăng ký
+                </button>
+                <a asp-controller="User" asp-action="Login" class="btn btn-outline-secondary btn-lg rounded-pill px-5 fw-bold">
+                    Quay lại Đăng nhập
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.js"></script>
+    <script>
+        // Khởi tạo AOS
+        if (typeof AOS !== 'undefined') {
+            AOS.init({
+                duration: 800,
+                once: true,
+                offset: 50
+            });
+        }
+
+        $(document).ready(function () {
+            var validationStatus = {
+                username: false,
+                email: false,
+                sobaohiem: false,
+                phone: false,
+                password: false
+            };
+
+            // Mật khẩu: tối thiểu 6, ít nhất 1 chữ số và 1 ký tự đặc biệt
+            function checkPasswordValidity() {
+                var element = $('#password');
+                var fieldValue = element.val() || '';
+                var errorElement = $('#password-error');
+                var re = /^(?=.{6,100}$)(?=.*\d)(?=.*\W).*$/
+
+                if (re.test(fieldValue)) {
+                    errorElement.text('');
+                    element.addClass('is-valid').removeClass('is-invalid');
+                    validationStatus.password = true;
+                } else {
+                    errorElement.text('Mật khẩu phải ít nhất 6 ký tự, chứa chữ số và ký tự đặc biệt.');
+                    element.addClass('is-invalid').removeClass('is-valid');
+                    validationStatus.password = false;
+                }
+            }
+
+            // Kiểm tra username format trước khi AJAX (phải có ít nhất 1 chữ cái, không toàn số, không khoảng trắng)
+            function validateUsernameFormat(value) {
+                var re = /^(?=.*[A-Za-z])[A-Za-z0-9]{4,50}$/;
+                return re.test(value);
+            }
+
+            function checkFieldUniqueness(fieldName, element) {
+                var fieldValue = element.val().trim();
+                var errorElement = $('#' + fieldName + '-error');
+
+                element.removeClass('is-invalid is-valid');
+                errorElement.text('');
+                validationStatus[fieldName] = false;
+
+                // Basic HTML5 validity
+                if (element[0].checkValidity() === false) {
+                    if (element.prop('required') && fieldValue === '') {
+                        errorElement.text('Trường này là bắt buộc.');
+                    } else {
+                        errorElement.text(element.attr('title'));
+                    }
+                    element.addClass('is-invalid');
+                    return;
+                }
+
+                // Additional client-side format checks
+                if (fieldName === 'username' && !validateUsernameFormat(fieldValue)) {
+                    errorElement.text('Tên đăng nhập không hợp lệ: phải có ít nhất 1 chữ cái, không có khoảng trắng, 4-50 ký tự.');
+                    element.addClass('is-invalid');
+                    return;
+                }
+                if (fieldName === 'sobaohiem' && !/^\d{10}$/.test(fieldValue)) {
+                    errorElement.text('Số BHYT phải có đúng 10 chữ số.');
+                    element.addClass('is-invalid');
+                    return;
+                }
+
+                // AJAX uniqueness check
+                $.ajax({
+                    url: '@Url.Action("CheckUniqueness", "User")',
+                    type: 'POST',
+                    data: { fieldName: fieldName, fieldValue: fieldValue },
+                    beforeSend: function() {
+                        errorElement.html('<span class="text-secondary"><i class="fas fa-spinner fa-spin me-1"></i>Đang kiểm tra...</span>');
+                    },
+                    success: function (response) {
+                        if (response.isUnique) {
+                            errorElement.text('');
+                            element.addClass('is-valid').removeClass('is-invalid');
+                            validationStatus[fieldName] = true;
+                        } else {
+                            errorElement.text(response.errorMessage);
+                            element.addClass('is-invalid').removeClass('is-valid');
+                            validationStatus[fieldName] = false;
+                        }
+                    },
+                    error: function () {
+                        errorElement.text('Lỗi kết nối Server.');
+                        element.addClass('is-invalid').removeClass('is-valid');
+                        validationStatus[fieldName] = false;
+                    }
+                });
+            }
+
+            $('#username').on('blur', function () {
+                checkFieldUniqueness('username', $(this));
+            });
+
+            $('#password').on('input blur', checkPasswordValidity);
+
+            $('#email').on('blur', function () {
+                checkFieldUniqueness('email', $(this));
+            });
+
+            $('#phone').on('blur', function () {
+                checkFieldUniqueness('phone', $(this));
+            });
+
+            $('#soBaoHiem').on('blur', function () {
+                checkFieldUniqueness('sobaohiem', $(this));
+            });
+
+            setTimeout(function() {
+                $('#username').trigger('blur');
+                $('#email').trigger('blur');
+                $('#phone').trigger('blur');
+                $('#soBaoHiEm').trigger('blur');
+                checkPasswordValidity();
+            }, 500);
+        });
+    </script>
+}
