@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "D:\\Nhom6_CC-MTPTPM_CK\\BookinhMVC\\BookinhMVC.csproj": {}
+    "D:\\demo2\\LTW_Do_An_Booking\\BookinhMVC\\BookinhMVC.csproj": {}
   },
   "projects": {
-    "D:\\Nhom6_CC-MTPTPM_CK\\BookinhMVC\\BookinhMVC.csproj": {
+    "D:\\demo2\\LTW_Do_An_Booking\\BookinhMVC\\BookinhMVC.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\Nhom6_CC-MTPTPM_CK\\BookinhMVC\\BookinhMVC.csproj",
+        "projectUniqueName": "D:\\demo2\\LTW_Do_An_Booking\\BookinhMVC\\BookinhMVC.csproj",
         "projectName": "BookinhMVC",
-        "projectPath": "D:\\Nhom6_CC-MTPTPM_CK\\BookinhMVC\\BookinhMVC.csproj",
-        "packagesPath": "C:\\Users\\user\\.nuget\\packages\\",
-        "outputPath": "D:\\Nhom6_CC-MTPTPM_CK\\BookinhMVC\\obj\\",
+        "projectPath": "D:\\demo2\\LTW_Do_An_Booking\\BookinhMVC\\BookinhMVC.csproj",
+        "packagesPath": "C:\\Users\\hienq\\.nuget\\packages\\",
+        "outputPath": "D:\\demo2\\LTW_Do_An_Booking\\BookinhMVC\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\user\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\hienq\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
@@ -111,7 +111,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.308/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.305/PortableRuntimeIdentifierGraph.json"
         }
       }
     }
