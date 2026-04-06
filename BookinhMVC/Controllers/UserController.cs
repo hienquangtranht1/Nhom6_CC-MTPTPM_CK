@@ -69,7 +69,34 @@ namespace BookinhMVC.Controllers
         // PHẦN 1: WEB MVC (Trả về View cho trình duyệt)
         // =========================================================
 
-        
+        #region Authentication (Login/Register/Logout)
+
+        [HttpGet("Login")]
+        public IActionResult Login() => View();
+
+        [HttpPost("Login")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Login(string username, string password)
+        {
+            var user = await _context.NguoiDungs.FirstOrDefaultAsync(u => u.TenDangNhap == username);
+            if (user != null && _passwordHasher.VerifyHashedPassword(user, user.MatKhau, password) == PasswordVerificationResult.Success)
+            {
+                // Lưu Session
+                HttpContext.Session.SetInt32("UserId", user.MaNguoiDung);
+                HttpContext.Session.SetString("UserRole", user.VaiTro);
+
+                if (user.VaiTro == "Bệnh nhân")
+                {
+                    var p = await _context.BenhNhans.FindAsync(user.MaNguoiDung);
+                    if (p != null) HttpContext.Session.SetString("PatientName", p.HoTen);
+                }
+
+                return RedirectToAction("Index", "Home");
+            }
+
+            ModelState.AddModelError("", "Sai tài khoản hoặc mật khẩu.");
+            return View();
+        }
 
         [HttpPost("/Logout")]
         [ValidateAntiForgeryToken]
@@ -79,7 +106,85 @@ namespace BookinhMVC.Controllers
             return RedirectToAction("Login", "User");
         }
 
-        
+        [AllowAnonymous]
+        [HttpGet("Register")]
+        public IActionResult Register() => View();
+
+        [HttpPost("Register")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Register(string username, string password, string fullname, DateTime dob,
+           string gender, string phone, string email, string address, string soBaoHiem)
+        {
+            // Server-side format validation (defensive)
+            // Username: alphanumeric, 4-50 chars, at least one letter, no spaces/special
+            if (string.IsNullOrWhiteSpace(username) || !Regex.IsMatch(username, @"^(?=.*[A-Za-z])[A-Za-z0-9]{4,50}$"))
+            {
+                ModelState.AddModelError("", "Tên đăng nhập không hợp lệ: phải chứa chữ và số, không có khoảng trắng, 4-50 ký tự và có ít nhất 1 chữ cái.");
+                return View();
+            }
+
+            // Password: min 6, contains digit and special char
+            if (string.IsNullOrWhiteSpace(password) || !Regex.IsMatch(password, @"^(?=.{6,100}$)(?=.*\d)(?=.*\W).*$"))
+            {
+                ModelState.AddModelError("", "Mật khẩu phải ít nhất 6 ký tự, chứa chữ số và ký tự đặc biệt.");
+                return View();
+            }
+
+            // Phone: must be 10 digits starting with 0
+            if (string.IsNullOrWhiteSpace(phone) || !Regex.IsMatch(phone, @"^0\d{9}$"))
+            {
+                ModelState.AddModelError("", "Số điện thoại không hợp lệ. Phải có 10 chữ số và bắt đầu bằng 0.");
+                return View();
+            }
+
+            // BHYT: must be exactly 10 digits
+            if (string.IsNullOrWhiteSpace(soBaoHiem) || !Regex.IsMatch(soBaoHiem, @"^\d{10}$"))
+            {
+                ModelState.AddModelError("", "Số BHYT phải có đúng 10 chữ số.");
+                return View();
+            }
+
+            // Uniqueness checks
+            if (await _context.NguoiDungs.AnyAsync(u => u.TenDangNhap == username))
+            {
+                ModelState.AddModelError("", "Tên đăng nhập đã tồn tại.");
+                return View();
+            }
+
+            if (await _context.BenhNhans.AnyAsync(b => b.Email == email))
+            {
+                ModelState.AddModelError("", "Email đã được sử dụng.");
+                return View();
+            }
+
+            if (await _context.BenhNhans.AnyAsync(b => b.SoBaoHiem == soBaoHiem))
+            {
+                ModelState.AddModelError("", "Số BHYT đã được sử dụng.");
+                return View();
+            }
+
+            string otp = new Random().Next(100000, 999999).ToString();
+            var registrationData = new RegistrationModel
+            {
+                username = username,
+                password = password,
+                fullname = fullname,
+                dob = dob,
+                gender = gender,
+                phone = phone,
+                email = email,
+                address = address,
+                soBaoHiem = soBaoHiem,
+                otp = otp
+            };
+
+            HttpContext.Session.SetString("RegistrationData", JsonSerializer.Serialize(registrationData));
+            HttpContext.Session.SetString("RegistrationOtp", otp);
+            HttpContext.Session.SetString("RegistrationOtpTime", DateTime.UtcNow.ToString("o"));
+
+            await SendMailAsync(email, "Xác nhận đăng ký", $"Mã OTP của bạn là: {otp}");
+            return RedirectToAction("VerifyOtp");
+        }
 
         [AllowAnonymous]
         [HttpGet("VerifyOtp")]
@@ -208,7 +313,100 @@ namespace BookinhMVC.Controllers
 
         #region Password Management
 
-        
+        [AllowAnonymous]
+        [HttpGet("ForgotPassword")]
+        public IActionResult ForgotPassword() => View();
+
+        [AllowAnonymous]
+        [HttpPost("ForgotPassword")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ForgotPassword(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                ModelState.AddModelError("", "Vui lòng nhập email.");
+                return View();
+            }
+
+            var patient = await _context.BenhNhans.FirstOrDefaultAsync(b => b.Email == email);
+            if (patient == null)
+            {
+                ModelState.AddModelError("", "Email không tồn tại.");
+                return View();
+            }
+
+            var otp = new Random().Next(100000, 999999).ToString();
+            HttpContext.Session.SetString("ForgotPasswordOtp", otp);
+            HttpContext.Session.SetString("ForgotPasswordEmail", email);
+            HttpContext.Session.SetString("ForgotPasswordOtpTime", DateTime.UtcNow.ToString("o"));
+
+            await SendMailAsync(email, "Quên mật khẩu - Mã OTP", $"Mã OTP của bạn: {otp}");
+            TempData["Message"] = "Đã gửi mã OTP tới email.";
+            return RedirectToAction("ResetPassword");
+        }
+
+        [AllowAnonymous]
+        [HttpGet("ResetPassword")]
+        public IActionResult ResetPassword() => View();
+
+        [AllowAnonymous]
+        [HttpPost("ResetPassword")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ResetPassword(string otp, string newPassword, string confirmPassword)
+        {
+            var sessionOtp = HttpContext.Session.GetString("ForgotPasswordOtp");
+            var email = HttpContext.Session.GetString("ForgotPasswordEmail");
+            var otpTimeStr = HttpContext.Session.GetString("ForgotPasswordOtpTime");
+
+            if (string.IsNullOrEmpty(sessionOtp) || string.IsNullOrEmpty(email))
+            {
+                TempData["Error"] = "Phiên OTP đã hết hạn.";
+                return RedirectToAction("ForgotPassword");
+            }
+
+            if (otp != sessionOtp)
+            {
+                ModelState.AddModelError("", "Mã OTP không đúng.");
+                return View();
+            }
+
+            if (DateTime.TryParse(otpTimeStr, out var t) && (DateTime.UtcNow - t).TotalMinutes > 15)
+            {
+                TempData["Error"] = "Mã OTP đã hết hạn.";
+                return RedirectToAction("ForgotPassword");
+            }
+
+            if (string.IsNullOrWhiteSpace(newPassword) || newPassword != confirmPassword)
+            {
+                ModelState.AddModelError("", "Mật khẩu mới không khớp.");
+                return View();
+            }
+
+            var patient = await _context.BenhNhans.FirstOrDefaultAsync(b => b.Email == email);
+            var user = await _context.NguoiDungs.FindAsync(patient.MaBenhNhan);
+
+            user.MatKhau = _passwordHasher.HashPassword(user, newPassword);
+            await _context.SaveChangesAsync();
+
+            HttpContext.Session.Remove("ForgotPasswordOtp");
+            HttpContext.Session.Remove("ForgotPasswordEmail");
+
+            TempData["Message"] = "Đặt lại mật khẩu thành công.";
+            return RedirectToAction("Login");
+        }
+
+        [HttpGet("ChangePassword")]
+        public IActionResult ChangePassword()
+        {
+            var role = HttpContext.Session.GetString("UserRole");
+            if (string.IsNullOrEmpty(role) || role != "Bệnh nhân")
+            {
+                TempData["Error"] = "Bạn cần đăng nhập.";
+                return RedirectToAction("Login", "User");
+            }
+            return View();
+        }
+
         [HttpPost("ChangePassword")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ChangePassword(string oldPassword, string newPassword, string confirmPassword)
@@ -254,7 +452,11 @@ namespace BookinhMVC.Controllers
             return View(patient);
         }
 
-        
+            await _context.SaveChangesAsync();
+            TempData["Message"] = "Cập nhật hồ sơ thành công!";
+            return RedirectToAction("Profile");
+        }
+
         [HttpGet("Appointments")]
         public async Task<IActionResult> Appointments()
         {
@@ -527,7 +729,33 @@ namespace BookinhMVC.Controllers
             return Unauthorized(new { success = false, message = "Sai thông tin đăng nhập" });
         }
 
-        
+        [HttpPost("/api/user/register")]
+        public async Task<IActionResult> ApiRegister([FromBody] RegisterRequestDto model)
+        {
+            if (await _context.NguoiDungs.AnyAsync(u => u.TenDangNhap == model.Username))
+                return BadRequest(new { success = false, message = "Tên đăng nhập đã tồn tại" });
+
+            string otp = new Random().Next(100000, 999999).ToString();
+            var reg = new RegistrationModel
+            {
+                username = model.Username,
+                password = model.Password,
+                fullname = model.Fullname,
+                email = model.Email,
+                phone = model.Phone,
+                dob = model.Dob,
+                gender = model.Gender,
+                address = model.Address,
+                soBaoHiem = model.SoBaoHiem,
+                otp = otp
+            };
+
+            HttpContext.Session.SetString("RegistrationData", JsonSerializer.Serialize(reg));
+            HttpContext.Session.SetString("RegistrationOtp", otp);
+
+            await SendMailAsync(model.Email, "Mã xác thực đăng ký", $"Mã OTP: {otp}");
+            return Ok(new { success = true, message = "Đã gửi OTP" });
+        }
 
         [HttpPost("/api/user/verify-otp")]
         public async Task<IActionResult> ApiVerifyOtp([FromBody] VerifyOtpRequestDto body)
@@ -590,7 +818,49 @@ namespace BookinhMVC.Controllers
             }
         }
 
-        
+        [HttpPost("/api/user/forgot-password")]
+        public async Task<IActionResult> ApiForgotPassword([FromBody] ForgotPasswordRequestDto body)
+        {
+            if (body.Step == "request_otp")
+            {
+                var user = await _context.BenhNhans.FirstOrDefaultAsync(u => u.Email == body.Email);
+                if (user == null) return BadRequest(new { message = "Email không tồn tại" });
+
+                string otp = new Random().Next(100000, 999999).ToString();
+                HttpContext.Session.SetString("ForgotPasswordOtp", otp);
+                HttpContext.Session.SetString("ForgotPasswordEmail", body.Email);
+
+                await SendMailAsync(body.Email, "Quên mật khẩu", $"Mã OTP: {otp}");
+                return Ok(new { success = true, message = "Đã gửi OTP" });
+            }
+            else if (body.Step == "verify_otp")
+            {
+                var sessionOtp = HttpContext.Session.GetString("ForgotPasswordOtp");
+                if (body.Otp != sessionOtp) return BadRequest(new { message = "Mã OTP sai" });
+                return Ok(new { success = true, message = "OTP đúng" });
+            }
+            return BadRequest(new { message = "Step không hợp lệ" });
+        }
+
+        [HttpPost("/api/user/reset-password")]
+        public async Task<IActionResult> ApiResetPassword([FromBody] ResetPasswordRequestDto body)
+        {
+            var sessionOtp = HttpContext.Session.GetString("ForgotPasswordOtp");
+            var email = HttpContext.Session.GetString("ForgotPasswordEmail");
+
+            if (body.Otp != sessionOtp) return BadRequest(new { message = "Mã OTP sai hoặc hết hạn" });
+            if (string.IsNullOrEmpty(email)) return BadRequest(new { message = "Phiên hết hạn" });
+
+            var patient = await _context.BenhNhans.FirstOrDefaultAsync(u => u.Email == email);
+            var user = await _context.NguoiDungs.FindAsync(patient.MaBenhNhan);
+
+            user.MatKhau = _passwordHasher.HashPassword(user, body.NewPassword);
+            await _context.SaveChangesAsync();
+
+            HttpContext.Session.Remove("ForgotPasswordOtp");
+            HttpContext.Session.Remove("ForgotPasswordEmail");
+            return Ok(new { success = true, message = "Đổi mật khẩu thành công" });
+        }
 
         [HttpPost("/User/SendVerificationCode")]
         public async Task<IActionResult> SendVerificationCode()
