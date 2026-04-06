@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using BookinhMVC.Models;
 using Microsoft.EntityFrameworkCore;
@@ -327,7 +327,12 @@ namespace BookinhMVC.Controllers
         // =========================================================
         public async Task<IActionResult> Reviews()
         {
-            var reviews = await _context.DanhGias.Include(r => r.BacSi).Include(r => r.BenhNhan).AsNoTracking().ToListAsync();
+            var reviews = await _context.DanhGias
+                .Include(r => r.BacSi)
+                .Include(r => r.BenhNhan)
+                .OrderByDescending(r => r.NgayDanhGia)
+                .AsNoTracking()
+                .ToListAsync();
             return View(reviews);
         }
 
