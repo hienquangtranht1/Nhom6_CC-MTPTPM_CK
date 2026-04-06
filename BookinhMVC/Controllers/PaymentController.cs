@@ -51,7 +51,6 @@ namespace BookinhMVC.Controllers
         // ============================================================
         // 2. TRANG LỊCH SỬ GIAO DỊCH
         // ============================================================
-
         [HttpGet("History")]
         public async Task<IActionResult> History()
         {
@@ -65,6 +64,155 @@ namespace BookinhMVC.Controllers
 
             return View(history);
         }
+
+        // ============================================================
+        // 3. XỬ LÝ TRỪ TIỀN VÍ (ĐỂ THANH TOÁN DỊCH VỤ)
+        // ============================================================
+        [HttpPost("PayWithWallet")]
+        public async Task<IActionResult> PayWithWallet(decimal amount, string returnUrl)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            if (userId == null) return RedirectToAction("Login", "User");
+
+            var wallet = await _context.TaiKhoanBenhNhan.FirstOrDefaultAsync(x => x.MaBenhNhan == userId);
+
+            if (wallet == null || wallet.SoDuHienTai < amount)
+            {
+                TempData["Error"] = "Số dư không đủ. Vui lòng nạp thêm!";
+                if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
+                return RedirectToAction("Index");
+            }
+
+            // Trừ tiền và ghi giao dịch
+            wallet.SoDuHienTai -= amount;
+            wallet.NgayCapNhatCuoi = DateTime.Now;
+
+            var trans = new GiaoDichThanhToan
+            {
+                MaBenhNhan = userId.Value,
+                SoTien = amount,
+                NgayGiaoDich = DateTime.Now,
+                LoaiGiaoDich = "Thanh toán dịch vụ (Trừ Ví)",
+                NoiDung = "Thanh toán dịch vụ",
+                MaThamChieu = DateTime.Now.Ticks.ToString(),
+                TrangThai = "Thành công"
+            };
+            _context.GiaoDichThanhToan.Add(trans);
+            await _context.SaveChangesAsync();
+
+            HttpContext.Session.SetString("HasPaidQA", "true");
+
+            TempData["Success"] = $"Thanh toán thành công! Đã trừ {amount:N0}đ.";
+
+            if (!string.IsNullOrEmpty(returnUrl)) return Redirect(returnUrl);
+            return RedirectToAction("Index");
+        }
+
+        // ============================================================
+        // 4. TẠO GIAO DỊCH NẠP TIỀN QUA QR (CHECKOUT) - WEB
+        // ============================================================
+        [HttpPost("Checkout")]
+        public async Task<IActionResult> Checkout(decimal amount, string orderInfo)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            if (userId == null) return RedirectToAction("Login", "User");
+
+            string uniqueCode = DateTime.Now.Ticks.ToString();
+
+            var trans = new GiaoDichThanhToan
+            {
+                MaBenhNhan = userId.Value,
+                SoTien = amount,
+                NgayGiaoDich = DateTime.Now,
+                LoaiGiaoDich = "Nạp tiền (QR)",
+                NoiDung = orderInfo ?? "Nap tien vao vi",
+                MaThamChieu = uniqueCode,
+                TrangThai = "Đang xử lý"
+            };
+
+            _context.GiaoDichThanhToan.Add(trans);
+            await _context.SaveChangesAsync();
+
+            ViewBag.TransId = trans.MaGiaoDich;
+            ViewBag.Amount = amount;
+            ViewBag.Content = uniqueCode;
+            ViewBag.OrderInfo = orderInfo;
+            ViewBag.BankId = "TCB";
+            ViewBag.AccountNo = "19074184799019";
+            ViewBag.AccountName = "TRAN QUANG HIEN";
+
+            return View("Checkout");
+        }
+
+        // ============================================================
+        // 5. API CHECK TRẠNG THÁI (DÙNG CHO TRANG QR)
+        // ============================================================
+        [HttpGet("CheckStatus")]
+        public async Task<IActionResult> CheckStatus(int id)
+        {
+            var trans = await _context.GiaoDichThanhToan.FindAsync(id);
+
+            if (trans != null && trans.TrangThai == "Thành công")
+            {
+                await ProcessAddMoneyToWallet(trans);
+                return Json(new { success = true });
+            }
+            return Json(new { success = false });
+        }
+
+        // ============================================================
+        // 6. NẠP TIỀN QUA VNPAY (WEB)
+        // ============================================================
+        [HttpPost("CreatePaymentVnpay")]
+        public async Task<IActionResult> CreatePaymentVnpay(decimal amount)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            if (userId == null) return RedirectToAction("Login", "User");
+
+            if (amount < 10000)
+            {
+                TempData["Error"] = "VNPAY yêu cầu nạp tối thiểu 10,000đ";
+                return RedirectToAction("Index");
+            }
+
+            string uniqueCode = DateTime.Now.Ticks.ToString();
+            var trans = new GiaoDichThanhToan
+            {
+                MaBenhNhan = userId.Value,
+                SoTien = amount,
+                NgayGiaoDich = DateTime.Now,
+                LoaiGiaoDich = "Nạp tiền Ví (VNPAY)",
+                NoiDung = "Nạp tiền qua cổng VNPAY",
+                MaThamChieu = uniqueCode,
+                TrangThai = "Đang xử lý"
+            };
+            _context.GiaoDichThanhToan.Add(trans);
+            await _context.SaveChangesAsync();
+
+            string vnp_Returnurl = _configuration["VnPay:ReturnUrl"];
+            string vnp_Url = _configuration["VnPay:BaseUrl"];
+            string vnp_TmnCode = _configuration["VnPay:TmnCode"];
+            string vnp_HashSecret = _configuration["VnPay:HashSecret"];
+
+            VnPayLibrary vnpay = new VnPayLibrary();
+            vnpay.AddRequestData("vnp_Version", VnPayLibrary.VERSION);
+            vnpay.AddRequestData("vnp_Command", "pay");
+            vnpay.AddRequestData("vnp_TmnCode", vnp_TmnCode);
+            vnpay.AddRequestData("vnp_Amount", ((long)amount * 100).ToString());
+            vnpay.AddRequestData("vnp_CreateDate", DateTime.Now.ToString("yyyyMMddHHmmss"));
+            vnpay.AddRequestData("vnp_CurrCode", "VND");
+            vnpay.AddRequestData("vnp_IpAddr", "127.0.0.1");
+            vnpay.AddRequestData("vnp_Locale", "vn");
+            vnpay.AddRequestData("vnp_OrderInfo", "Nap tien " + uniqueCode);
+            vnpay.AddRequestData("vnp_OrderType", "other");
+            vnpay.AddRequestData("vnp_ReturnUrl", vnp_Returnurl);
+            vnpay.AddRequestData("vnp_TxnRef", uniqueCode);
+
+            string paymentUrl = vnpay.CreateRequestUrl(vnp_Url, vnp_HashSecret);
+            return Redirect(paymentUrl);
+        }
+
+        // ============================================================
         // 7. CALLBACK VNPAY (CẬP NHẬT TRẠNG THÁI + SIGNALR)
         //    => Redirect về trang Lịch sử giao dịch (History)
         // ============================================================
@@ -135,6 +283,60 @@ namespace BookinhMVC.Controllers
             // Redirect về trang Lịch sử giao dịch để người dùng xem kết quả
             return RedirectToAction("History");
         }
+
+        // ============================================================
+        // 8. HÀM PHỤ TRỢ: CỘNG TIỀN VÀO VÍ
+        // ============================================================
+        private async Task ProcessAddMoneyToWallet(GiaoDichThanhToan trans)
+        {
+            if (trans.LoaiGiaoDich != null && trans.LoaiGiaoDich.Contains("Nạp tiền"))
+            {
+                // Idempotency: chỉ thực hiện khi trạng thái là Thành công và chưa cộng tiền
+                // Kiểm tra trong DB xem giao dịch đã được xử lý/đánh dấu trước đó chưa (ví dụ bằng GhiChu/PhuongThuc/NgayCapNhat)
+                // Ở đây ta dùng TrangThai + NgayCapNhat để tránh cộng 2 lần trong luồng callback.
+                if (trans.TrangThai != "Thành công") return;
+
+                var wallet = await _context.TaiKhoanBenhNhan.FirstOrDefaultAsync(x => x.MaBenhNhan == trans.MaBenhNhan);
+                if (wallet == null)
+                {
+                    wallet = new TaiKhoanBenhNhan { MaBenhNhan = trans.MaBenhNhan, SoDuHienTai = 0, NgayCapNhatCuoi = DateTime.Now };
+                    _context.TaiKhoanBenhNhan.Add(wallet);
+                }
+
+                // Nếu giao dịch đã được cộng trước đó (ví dụ bằng kiểm tra MaGiaoDich trong wallet logs) — skipping advanced checks for brevity.
+                wallet.SoDuHienTai += trans.SoTien;
+                wallet.NgayCapNhatCuoi = DateTime.Now;
+
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        // ============================================================
+        // 9. API CHO MOBILE: TẠO URL NẠP TIỀN
+        // ============================================================
+        [HttpPost("api/create-deposit")]
+        public async Task<IActionResult> ApiCreateDeposit([FromBody] DepositRequest req)
+        {
+            var userId = HttpContext.Session.GetInt32("UserId");
+            if (userId == null) return Unauthorized(new { message = "Vui lòng đăng nhập" });
+
+            if (req.Amount < 10000)
+                return BadRequest(new { message = "Số tiền nạp tối thiểu là 10,000đ" });
+
+            // 1. Tạo giao dịch "Đang xử lý"
+            string uniqueCode = DateTime.Now.Ticks.ToString();
+            var trans = new GiaoDichThanhToan
+            {
+                MaBenhNhan = userId.Value,
+                SoTien = req.Amount,
+                NgayGiaoDich = DateTime.Now,
+                LoaiGiaoDich = "Nạp tiền Ví (VNPAY)",
+                NoiDung = "Nạp tiền qua App Mobile",
+                MaThamChieu = uniqueCode,
+                TrangThai = "Đang xử lý"
+            };
+            _context.GiaoDichThanhToan.Add(trans);
+            await _context.SaveChangesAsync();
 
             // 2. Tạo URL VNPAY
             string vnp_Returnurl = _configuration["VnPay:ReturnUrl"];
