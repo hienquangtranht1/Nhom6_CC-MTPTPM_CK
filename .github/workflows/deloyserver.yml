@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
 
-    steps:
+        steps:
       - name: SSH Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -47,11 +47,26 @@ jobs:
           port: 22
           script: |
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/nhom6-booking:latest
+            
+            # Tạo network nếu chưa có
+            docker network create nhom6-network || true
+            
+            # Đảm bảo MySQL luôn chạy
+            docker start mysql || docker run -d --name mysql --network nhom6-network -e MYSQL_ROOT_PASSWORD=YourPassword123 -e MYSQL_DATABASE=BookingDB -p 3306:3306 --restart always mysql:8.0
+            
+            # Tắt app cũ
             docker stop nhom6-booking || true
             docker rm nhom6-booking || true
+            
+            # Chạy app mới (Nhớ kết nối mạng mysql và bật Development mode để xem lỗi nếu có)
             docker run -d \
               --name nhom6-booking \
-              -p 8080:8080 \
+              --network nhom6-network \
+              -p 8080:5062 \
               --restart always \
+              -e "ASPNETCORE_ENVIRONMENT=Development" \
+              -e "ConnectionStrings__DefaultConnection=Server=mysql;Port=3306;Database=BookingDB;User=root;Password=YourPassword123;" \
               ${{ secrets.DOCKERHUB_USERNAME }}/nhom6-booking:latest
+              
             echo "Deploy thanh cong!"
+
