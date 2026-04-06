@@ -102,5 +102,30 @@ namespace BookinhMVC.Controllers
 
         return View("MedicalRecords", records);
     }
+    [HttpPost]
+    public async Task<IActionResult> Answer(int questionId, string answer)
+    {
+        if (!IsDoctorLoggedIn()) return RedirectToAction("Login");
+
+        var q = await _context.Questions.FindAsync(questionId);
+        if (q != null)
+        {
+            q.Answer = answer;
+            q.Status = "Đã trả lời";
+            q.AnsweredAt = DateTime.Now; // Lưu thời gian trả lời
+
+            _context.Questions.Update(q);
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "Đã gửi câu trả lời thành công!";
+        }
+        else
+        {
+            TempData["Error"] = "Không tìm thấy câu hỏi.";
+        }
+
+        // Redirect về trang Question
+        return RedirectToAction("Question");
+    }
 }
     
