@@ -36,7 +36,77 @@ namespace BookinhMVC.Controllers
         // =========================================================
         // CRUD KHOA (Departments)
         // =========================================================
-       
+        public async Task<IActionResult> Departments()
+        {
+            var departments = await _context.Khoas.AsNoTracking().ToListAsync();
+            return View(departments);
+        }
+
+        public IActionResult CreateDepartment() => View();
+
+        [HttpPost]
+        public async Task<IActionResult> CreateDepartment(string tenKhoa, string moTa)
+        {
+            var model = new Khoa
+            {
+                TenKhoa = tenKhoa,
+                MoTa = moTa,
+                NgayTao = DateTime.Now
+            };
+            _context.Khoas.Add(model);
+            await _context.SaveChangesAsync();
+            return RedirectToAction("Departments");
+        }
+
+        public async Task<IActionResult> EditDepartment(int id)
+        {
+            var dep = await _context.Khoas.FindAsync(id);
+            if (dep == null) return NotFound();
+            return View(dep);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> EditDepartment(int id, string tenKhoa, string moTa)
+        {
+            var existing = await _context.Khoas.AsNoTracking().FirstOrDefaultAsync(k => k.MaKhoa == id);
+            if (existing == null) return NotFound();
+            var model = new Khoa
+            {
+                MaKhoa = id,
+                TenKhoa = tenKhoa,
+                MoTa = moTa,
+                NgayTao = existing.NgayTao
+            };
+            _context.Khoas.Update(model);
+            await _context.SaveChangesAsync();
+            return RedirectToAction("Departments");
+        }
+
+        public async Task<IActionResult> DeleteDepartment(int id)
+        {
+            var dep = await _context.Khoas.FindAsync(id);
+            if (dep == null) return NotFound();
+            return View(dep);
+        }
+
+        [HttpPost, ActionName("DeleteDepartment")]
+        public async Task<IActionResult> DeleteDepartmentConfirmed(int id)
+        {
+            var dep = await _context.Khoas.FindAsync(id);
+            if (dep != null)
+            {
+                _context.Khoas.Remove(dep);
+                await _context.SaveChangesAsync();
+            }
+            return RedirectToAction("Departments");
+        }
+
+        public async Task<IActionResult> DepartmentDetails(int id)
+        {
+            var dep = await _context.Khoas.FindAsync(id);
+            if (dep == null) return NotFound();
+            return View(dep);
+        }
 
         // =========================================================
         // CRUD NGƯỜI DÙNG (Users)
