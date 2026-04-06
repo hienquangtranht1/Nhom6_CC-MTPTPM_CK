@@ -135,8 +135,6 @@ namespace BookinhMVC.Controllers
         // =========================================================
         public async Task<IActionResult> Patients()
         {
-            // Tối ưu hiệu năng bằng AsNoTracking cho danh sách lớn
-            // Tối ưu hiệu năng bằng AsNoTracking cho danh sách lớn
             var patients = await _context.BenhNhans.AsNoTracking().ToListAsync();
             return View(patients);
         }
