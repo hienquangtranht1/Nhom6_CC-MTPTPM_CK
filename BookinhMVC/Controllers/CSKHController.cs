@@ -74,16 +74,5 @@ namespace BookinhMVC.Controllers
 
             return Json(list);
         }
-
-        [HttpGet]
-        public IActionResult Ping()
-        {
-            return Json(new
-            {
-                status = "ok",
-                message = "CSKHController is running",
-                serverTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
-            });
-        }
     }
 }

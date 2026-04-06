@@ -70,7 +70,5 @@ namespace BookinhMVC.Controllers
             return RedirectToAction("Login", "Admin");
         }
 
-        
-
-        
     }
+}
